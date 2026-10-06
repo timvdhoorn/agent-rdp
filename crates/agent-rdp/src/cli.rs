@@ -124,6 +124,10 @@ pub struct ConnectArgs {
     /// Enable Windows UI Automation (requires automation agent on remote host)
     #[arg(long)]
     pub enable_win_automation: bool,
+
+    /// Start the automation agent as administrator; confirms one UAC prompt in the session
+    #[arg(long, requires = "enable_win_automation")]
+    pub elevated: bool,
 }
 
 /// Screenshot command arguments.

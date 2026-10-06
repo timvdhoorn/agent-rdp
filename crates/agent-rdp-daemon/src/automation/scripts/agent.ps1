@@ -5,7 +5,9 @@
 # BasePath kept for reference/logging (RDPDR drive still mapped for future file transfer)
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'BasePath')]
 param(
-    [string]$BasePath = "\\TSCLIENT\agent-automation"
+    [string]$BasePath = "\\TSCLIENT\agent-automation",
+    # Empty by default so the agent leaves no file on the host; pass a path to debug.
+    [string]$LogPath = ""
 )
 
 # ============ SETUP ============
@@ -22,14 +24,15 @@ Add-Type -AssemblyName System.Windows.Forms
 $script:RefMap = @{}  # ref number -> AutomationElement mapping
 $script:SnapshotId = $null
 $script:Version = "1.1.0"  # Version bump for DVC support
-# Local log path on Windows machine (RDPDR not used for logging anymore)
-$script:LocalLogPath = "$env:TEMP\agent-rdp-automation.log"
+# Optional local log; off unless -LogPath is given
+$script:LocalLogPath = $LogPath
 $script:DvcHandle = [IntPtr]::Zero
 
 # ============ LOGGING ============
 
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
+    if (-not $script:LocalLogPath) { return }
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"
     $logEntry = "[$timestamp] [$Level] $Message"
 
@@ -48,9 +51,35 @@ $scriptDir = $PSScriptRoot
 . "$scriptDir\lib\actions.ps1"
 . "$scriptDir\lib\dvc.ps1"
 
+# ============ TRACE CLEANUP ============
+
+# The Win+R bootstrap leaves its command in the Run dialog history (RunMRU).
+# Remove that entry, and only that entry, so the host keeps no record of the agent.
+function Remove-RunMruTrace {
+    $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU'
+    try {
+        if (-not (Test-Path $key)) { return }
+        $item = Get-ItemProperty -Path $key
+        $order = [string]$item.MRUList
+        foreach ($name in (Get-Item -Path $key).Property) {
+            if ($name -eq 'MRUList') { continue }
+            if ([string]$item.$name -like '*\scripts\agent.ps1*') {
+                Remove-ItemProperty -Path $key -Name $name
+                $order = $order.Replace($name, '')
+            }
+        }
+        if ($order -ne [string]$item.MRUList) {
+            Set-ItemProperty -Path $key -Name MRUList -Value $order
+        }
+    } catch {
+        Write-Log "RunMRU cleanup failed: $($_.Exception.Message)" "WARN"
+    }
+}
+
 # ============ MAIN LOOP ============
 
 function Start-Agent {
+    Remove-RunMruTrace
     Write-Log "Agent starting with DVC transport"
     Write-Log "Local log path: $script:LocalLogPath"
     Write-Log "BasePath (for reference): $BasePath"

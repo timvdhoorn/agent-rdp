@@ -21,6 +21,7 @@ pub async fn handle(
     clipboard_changed_rx: &ClipboardChangedRx,
 ) -> Response {
     let enable_automation = params.enable_win_automation;
+    let elevated_automation = params.elevated_automation;
     let stream_port = params.stream_port;
     let stream_fps = params.stream_fps;
     let stream_quality = params.stream_quality;
@@ -165,12 +166,12 @@ pub async fn handle(
         let session_dir = crate::get_session_dir("");
         let bootstrap = AutomationBootstrap::new(session_dir);
 
-        // Launch the agent via Win+R
+        // Launch the agent via Win+R (as administrator when requested)
         {
             let session = rdp_session.lock().await;
             if let Some(ref rdp) = *session {
                 let auto_state = automation_state.lock().await;
-                if let Err(e) = bootstrap.launch_agent(rdp, &auto_state).await {
+                if let Err(e) = bootstrap.launch_agent(rdp, &auto_state, elevated_automation).await {
                     warn!("Failed to launch automation agent: {}", e);
                 }
             }

@@ -541,7 +541,16 @@ function Invoke-Run {
 
     $startInfo = New-Object System.Diagnostics.ProcessStartInfo
     $startInfo.FileName = "powershell.exe"
-    $startInfo.Arguments = "-NoProfile -Command `"$command $commandArgs`""
+    # The script travels as base64 so embedded quotes survive the command line. It is
+    # decoded under -Command, not -EncodedCommand, which would turn stderr into CLIXML.
+    # Exit code: an explicit `exit N` wins; otherwise a failing native command's code,
+    # then 1 if any error was written, else 0.
+    $runScript = "$command $commandArgs".TrimEnd()
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($runScript))
+    $decode = "`$ProgressPreference = 'SilentlyContinue'; `$global:LASTEXITCODE = 0; " +
+        "& ([scriptblock]::Create([Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('$encoded')))); " +
+        "if (`$LASTEXITCODE) { exit `$LASTEXITCODE }; if (`$Error.Count) { exit 1 }; exit 0"
+    $startInfo.Arguments = "-NoProfile -NonInteractive -Command `"$decode`""
     $startInfo.WorkingDirectory = $env:USERPROFILE
     $startInfo.UseShellExecute = $false
     $startInfo.RedirectStandardOutput = $wait

@@ -121,7 +121,8 @@ impl WsServer {
         &self,
         rdp_session: Arc<tokio::sync::Mutex<Option<RdpSession>>>,
     ) -> anyhow::Result<WsServerHandle> {
-        let addr = format!("0.0.0.0:{}", self.port);
+        // Loopback only: the viewer accepts mouse and keyboard input for the session.
+        let addr = format!("127.0.0.1:{}", self.port);
         let listener = TcpListener::bind(&addr).await?;
         info!("WebSocket server listening on ws://{}", addr);
 

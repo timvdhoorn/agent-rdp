@@ -85,10 +85,14 @@ impl AutomationBootstrap {
     }
 
     /// Launch the automation agent on the remote Windows machine via Win+R.
+    ///
+    /// With `elevated`, the Run dialog starts it as administrator (Ctrl+Shift+Enter) and the
+    /// UAC prompt that follows is confirmed with Alt+Y.
     pub async fn launch_agent(
         &self,
         rdp: &RdpSession,
         state: &AutomationState,
+        elevated: bool,
     ) -> anyhow::Result<()> {
         info!("Launching automation agent on remote Windows machine");
 
@@ -99,7 +103,7 @@ impl AutomationBootstrap {
         // The command to run via Win+R
         // Uses the mapped drive path: \\TSCLIENT\<drive_name>\scripts\agent.ps1
         let ps_command = format!(
-            "powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File \"\\\\TSCLIENT\\{}\\scripts\\agent.ps1\" -BasePath \"\\\\TSCLIENT\\{}\"",
+            "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"\\\\TSCLIENT\\{}\\scripts\\agent.ps1\" -BasePath \"\\\\TSCLIENT\\{}\"",
             state.drive_name,
             state.drive_name
         );
@@ -114,8 +118,15 @@ impl AutomationBootstrap {
         rdp.send_text(&ps_command).await?;
         sleep(Duration::from_millis(200)).await;
 
-        // Press Enter to execute
-        rdp.send_key_press("return").await?;
+        if elevated {
+            // Ctrl+Shift+Enter runs the Run dialog's command as administrator.
+            rdp.send_key_press("ctrl+shift+return").await?;
+            // The UAC prompt takes a moment to appear; Alt+Y answers "Yes".
+            sleep(Duration::from_millis(2500)).await;
+            rdp.send_key_press("alt+y").await?;
+        } else {
+            rdp.send_key_press("return").await?;
+        }
 
         info!("Automation agent launch command sent");
         Ok(())
@@ -185,7 +196,7 @@ impl AutomationBootstrap {
         // Launch agent
         {
             let state = state.lock().await;
-            self.launch_agent(rdp, &state).await?;
+            self.launch_agent(rdp, &state, false).await?;
         }
 
         // Wait for handshake

@@ -42,6 +42,11 @@ drives: Array<DriveMapping>,
  */
 enable_win_automation: boolean, 
 /**
+ * Start the automation agent elevated (Run as administrator).
+ * Confirms the UAC prompt in the session with Alt+Y.
+ */
+elevated_automation: boolean, 
+/**
  * WebSocket streaming port (0 = disabled).
  */
 stream_port: number, 

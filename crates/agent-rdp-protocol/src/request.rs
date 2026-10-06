@@ -94,6 +94,11 @@ pub struct ConnectRequest {
     #[serde(default)]
     pub enable_win_automation: bool,
 
+    /// Start the automation agent elevated (Run as administrator).
+    /// Confirms the UAC prompt in the session with Alt+Y.
+    #[serde(default)]
+    pub elevated_automation: bool,
+
     /// WebSocket streaming port (0 = disabled).
     #[serde(default)]
     pub stream_port: u16,
@@ -132,6 +137,7 @@ impl Default for ConnectRequest {
             height: 800,
             drives: Vec::new(),
             enable_win_automation: false,
+            elevated_automation: false,
             stream_port: 0,
             stream_fps: default_stream_fps(),
             stream_quality: default_stream_quality(),

@@ -77,6 +77,8 @@ export interface ConnectOptions {
   drives?: DriveMapping[];
   /** Enable Windows UI Automation. */
   enableWinAutomation?: boolean;
+  /** Start the automation agent as administrator (confirms one UAC prompt) */
+  elevatedAutomation?: boolean;
 }
 
 /** Result of a successful connection. */
