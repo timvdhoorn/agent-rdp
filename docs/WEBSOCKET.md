@@ -82,6 +82,37 @@ Broadcast periodically at the configured FPS.
 | `metadata.deviceWidth` | number | Image width in pixels |
 | `metadata.deviceHeight` | number | Image height in pixels |
 
+#### `pointer` - Remote Pointer Shape
+
+Sent when the Windows pointer shape changes (arrow, I-beam, wait, hand, ...) and to each newly connected client. The viewer uses it as the local mouse cursor and for the agent cursor overlay. The pointer is never drawn into frames or screenshots.
+
+```json
+{
+  "type": "pointer",
+  "shape": "bitmap",
+  "data": "<base64 PNG>",
+  "hotspotX": 0,
+  "hotspotY": 0
+}
+```
+
+`shape` is `default` (system arrow), `hidden` or `bitmap`; `data` is only present for `bitmap`.
+
+#### `cursor` - Agent Cursor
+
+Sent when a `mouse` command (CLI or SDK) moves or clicks. The viewer draws it as an overlay; nothing is drawn on the remote desktop. Input from viewers themselves is not echoed.
+
+```json
+{
+  "type": "cursor",
+  "x": 640,
+  "y": 400,
+  "action": "click"
+}
+```
+
+`action` is one of `move`, `click`, `right_click`, `double_click`, `middle_click`, `press` (drag start) or `release` (drag end). Coordinates are remote desktop pixels.
+
 #### `clipboard_changed` - Remote Clipboard Changed
 
 Sent when the remote Windows clipboard content changes (e.g., user copies text).
@@ -361,12 +392,14 @@ ws.send(JSON.stringify({
 
 ## Security Considerations
 
-- The WebSocket server binds to `0.0.0.0` by default (all interfaces)
-- There is no authentication on the WebSocket connection
-- For production use, consider:
-  - Running behind a reverse proxy with authentication
-  - Using SSH tunneling
-  - Binding to localhost only and using a local viewer
+- The WebSocket server binds to `127.0.0.1` by default; `--stream-bind <ip|tailscale>` changes this
+- Anyone who can reach the port controls the session. Loopback binds have no token; non-loopback binds require a random per-session `token` query parameter (`ws://host:port/?token=...`), which the CLI generates and prints
+- Binding to `0.0.0.0` or `::` is refused
+- Requests with an `Origin` header that does not match `Host` are rejected, so other web pages cannot open the socket
+- To reach it remotely, prefer:
+  - `tailscale serve --bg --https=<port> http://127.0.0.1:<port>` (tailnet only, HTTPS)
+  - `--stream-bind tailscale` to listen on the Tailscale address only
+  - SSH tunneling
 
 ## Compatibility
 

@@ -51,6 +51,14 @@ elevated_automation: boolean,
  */
 stream_port: number, 
 /**
+ * Address the streaming server binds to (default: 127.0.0.1).
+ */
+stream_bind?: string, 
+/**
+ * Access token for the streaming server. Required when `stream_bind` is not loopback.
+ */
+stream_token?: string, 
+/**
  * Streaming frame rate (default: 10).
  */
 stream_fps: number, 

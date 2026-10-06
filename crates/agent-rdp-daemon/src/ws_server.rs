@@ -16,7 +16,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info};
 
-use crate::rdp_session::RdpSession;
+use crate::rdp_session::{PointerShape, RdpSession};
 use crate::ws_input::{keyboard_to_fastpath, mouse_to_fastpath, ClipboardContent, WsInputMessage};
 
 /// Embedded viewer HTML.
@@ -53,6 +53,38 @@ struct StatusMessage {
     viewport_height: u16,
 }
 
+/// Agent cursor position (server → client), drawn as an overlay in the viewer.
+#[derive(Debug, Serialize)]
+struct CursorMessage {
+    #[serde(rename = "type")]
+    msg_type: &'static str,
+    x: u16,
+    y: u16,
+    action: &'static str,
+}
+
+/// Remote pointer shape (server → client), used as the viewer's mouse cursor.
+#[derive(Debug, Serialize)]
+struct PointerMessage {
+    #[serde(rename = "type")]
+    msg_type: &'static str,
+    /// "default", "hidden" or "bitmap".
+    shape: &'static str,
+    /// Base64 PNG for "bitmap".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data: Option<String>,
+    #[serde(rename = "hotspotX")]
+    hotspot_x: u16,
+    #[serde(rename = "hotspotY")]
+    hotspot_y: u16,
+}
+
+impl PointerMessage {
+    fn shape(shape: &'static str) -> Self {
+        Self { msg_type: "pointer", shape, data: None, hotspot_x: 0, hotspot_y: 0 }
+    }
+}
+
 /// Clipboard changed notification (server → client).
 #[derive(Debug, Serialize)]
 struct ClipboardChangedMessage {
@@ -73,6 +105,8 @@ type ClientId = u64;
 
 /// WebSocket server for desktop streaming.
 pub struct WsServer {
+    bind: String,
+    token: Option<String>,
     port: u16,
     jpeg_quality: u8,
     serve_viewer: bool,
@@ -84,6 +118,10 @@ pub struct WsServer {
 
 /// Configuration for the WebSocket server.
 pub struct WsServerConfig {
+    /// Address to bind to. Defaults to loopback.
+    pub bind: String,
+    /// Access token; required on every request when set.
+    pub token: Option<String>,
     pub port: u16,
     pub fps: u32,
     pub jpeg_quality: u8,
@@ -94,6 +132,8 @@ pub struct WsServerConfig {
 impl Default for WsServerConfig {
     fn default() -> Self {
         Self {
+            bind: "127.0.0.1".to_string(),
+            token: None,
             port: 9224,
             fps: 10,
             jpeg_quality: 80,
@@ -106,6 +146,8 @@ impl WsServer {
     /// Create a new WebSocket server.
     pub fn new(config: WsServerConfig) -> Self {
         Self {
+            bind: config.bind,
+            token: config.token,
             port: config.port,
             jpeg_quality: config.jpeg_quality,
             serve_viewer: config.serve_viewer,
@@ -121,9 +163,16 @@ impl WsServer {
         &self,
         rdp_session: Arc<tokio::sync::Mutex<Option<RdpSession>>>,
     ) -> anyhow::Result<WsServerHandle> {
-        // Loopback only: the viewer accepts mouse and keyboard input for the session.
-        let addr = format!("127.0.0.1:{}", self.port);
-        let listener = TcpListener::bind(&addr).await?;
+        // Loopback by default: the viewer accepts mouse and keyboard input for the session.
+        let ip: std::net::IpAddr = self.bind.parse()?;
+        if ip.is_unspecified() {
+            anyhow::bail!("refusing to bind the streaming server to all interfaces ({})", ip);
+        }
+        if !ip.is_loopback() && self.token.is_none() {
+            anyhow::bail!("a non-loopback streaming bind ({}) requires a stream token", ip);
+        }
+        let addr = std::net::SocketAddr::new(ip, self.port);
+        let listener = TcpListener::bind(addr).await?;
         info!("WebSocket server listening on ws://{}", addr);
 
         // Create broadcast channel
@@ -135,6 +184,7 @@ impl WsServer {
         let next_client_id = Arc::clone(&self.next_client_id);
         let jpeg_quality = self.jpeg_quality;
         let serve_viewer = self.serve_viewer;
+        let token = self.token.clone();
 
         let port = self.port;
         tokio::spawn(async move {
@@ -154,10 +204,12 @@ impl WsServer {
                         let broadcast_rx = broadcast_tx.subscribe();
                         let jpeg_quality = jpeg_quality;
                         let serve_viewer = serve_viewer;
+                        let token = token.clone();
 
                         tokio::spawn(async move {
                             if let Err(e) = handle_connection(
                                 stream,
+                                token.as_deref(),
                                 client_id,
                                 clients,
                                 rdp_session,
@@ -183,6 +235,7 @@ impl WsServer {
             broadcast_tx: broadcast_tx_clone,
             clients: Arc::clone(&self.clients),
             jpeg_quality: self.jpeg_quality,
+            pointer_sent: Mutex::new(None),
         })
     }
 }
@@ -192,9 +245,47 @@ pub struct WsServerHandle {
     broadcast_tx: tokio::sync::broadcast::Sender<String>,
     clients: Arc<Mutex<HashSet<ClientId>>>,
     jpeg_quality: u8,
+    /// Pointer version and newest client that last received the pointer shape.
+    pointer_sent: Mutex<Option<(u64, ClientId)>>,
 }
 
 impl WsServerHandle {
+    /// Send the remote pointer shape when it changed or a new client joined.
+    pub fn broadcast_pointer(&self, version: u64, shape: &PointerShape) {
+        let Some(newest_client) = self.clients.lock().iter().max().copied() else {
+            return;
+        };
+        {
+            let mut sent = self.pointer_sent.lock();
+            if *sent == Some((version, newest_client)) {
+                return;
+            }
+            *sent = Some((version, newest_client));
+        }
+
+        let msg = match shape {
+            PointerShape::Default => PointerMessage::shape("default"),
+            PointerShape::Hidden => PointerMessage::shape("hidden"),
+            PointerShape::Bitmap(pointer) => match encode_png(pointer.width, pointer.height, &pointer.bitmap_data) {
+                Ok(png) => PointerMessage {
+                    msg_type: "pointer",
+                    shape: "bitmap",
+                    data: Some(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &png)),
+                    hotspot_x: pointer.hotspot_x,
+                    hotspot_y: pointer.hotspot_y,
+                },
+                Err(e) => {
+                    error!("Failed to encode pointer: {}", e);
+                    return;
+                }
+            },
+        };
+
+        if let Ok(json) = serde_json::to_string(&msg) {
+            let _ = self.broadcast_tx.send(json);
+        }
+    }
+
     /// Check if there are any connected clients.
     pub fn has_clients(&self) -> bool {
         !self.clients.lock().is_empty()
@@ -238,6 +329,24 @@ impl WsServerHandle {
         }
     }
 
+    /// Show the agent's cursor in viewers. Viewer-only: nothing is drawn on the remote desktop.
+    pub fn broadcast_cursor(&self, x: u16, y: u16, action: &'static str) {
+        if !self.has_clients() {
+            return;
+        }
+
+        let msg = CursorMessage {
+            msg_type: "cursor",
+            x,
+            y,
+            action,
+        };
+
+        if let Ok(json) = serde_json::to_string(&msg) {
+            let _ = self.broadcast_tx.send(json);
+        }
+    }
+
     /// Notify clients that the remote clipboard has changed.
     pub fn broadcast_clipboard_changed(&self) {
         if !self.has_clients() {
@@ -258,6 +367,7 @@ impl WsServerHandle {
 /// Handle an incoming connection - either HTTP or WebSocket.
 async fn handle_connection(
     stream: TcpStream,
+    token: Option<&str>,
     client_id: ClientId,
     clients: Arc<Mutex<HashSet<ClientId>>>,
     rdp_session: Arc<tokio::sync::Mutex<Option<RdpSession>>>,
@@ -270,6 +380,10 @@ async fn handle_connection(
     let mut peek_buf = [0u8; 2048];
     let n = stream.peek(&mut peek_buf).await?;
     let request_preview = String::from_utf8_lossy(&peek_buf[..n]);
+
+    if !request_allowed(&request_preview, token) {
+        return serve_forbidden(stream).await;
+    }
 
     // Check if this is a WebSocket upgrade request
     let is_websocket = request_preview.to_lowercase().contains("upgrade: websocket");
@@ -285,6 +399,56 @@ async fn handle_connection(
         // Return 404 - viewer not enabled
         serve_not_found(stream).await
     }
+}
+
+/// Check the request's Origin (blocks cross-site WebSocket hijacking from web pages)
+/// and, when the server has a token, the `token` query parameter.
+fn request_allowed(request: &str, token: Option<&str>) -> bool {
+    let mut lines = request.lines();
+    let target = lines.next().and_then(|l| l.split_whitespace().nth(1)).unwrap_or("");
+
+    let mut host = None;
+    let mut origin = None;
+    for line in lines.take_while(|l| !l.is_empty()) {
+        if let Some((name, value)) = line.split_once(':') {
+            match name.trim().to_ascii_lowercase().as_str() {
+                "host" => host = Some(value.trim()),
+                "origin" => origin = Some(value.trim()),
+                _ => {}
+            }
+        }
+    }
+    if let Some(origin) = origin {
+        let origin_host = origin.split_once("://").map(|(_, rest)| rest).unwrap_or(origin);
+        if host.is_none_or(|h| !h.eq_ignore_ascii_case(origin_host)) {
+            return false;
+        }
+    }
+
+    let Some(expected) = token else { return true };
+    let given = target
+        .split_once('?')
+        .map(|(_, query)| query)
+        .unwrap_or("")
+        .split('&')
+        .find_map(|pair| pair.strip_prefix("token="))
+        .unwrap_or("");
+    // Constant-time comparison.
+    given.len() == expected.len()
+        && given.bytes().zip(expected.bytes()).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0
+}
+
+/// Serve a 403 response.
+async fn serve_forbidden(mut stream: TcpStream) -> anyhow::Result<()> {
+    use tokio::io::AsyncReadExt;
+
+    let mut buf = [0u8; 4096];
+    let _ = stream.read(&mut buf).await;
+    stream
+        .write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        .await?;
+    stream.flush().await?;
+    Ok(())
 }
 
 /// Serve a 404 response.
@@ -316,7 +480,7 @@ async fn serve_viewer_html(mut stream: TcpStream, ws_port: u16) -> anyhow::Resul
     );
 
     let response = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         html.len(),
         html
     );
@@ -542,6 +706,15 @@ fn encode_jpeg(width: u16, height: u16, rgba_data: &[u8], quality: u8) -> anyhow
     Ok(jpeg_data)
 }
 
+/// Encode an RGBA bitmap as PNG.
+fn encode_png(width: u16, height: u16, rgba_data: &[u8]) -> anyhow::Result<Vec<u8>> {
+    let img = image::RgbaImage::from_raw(width as u32, height as u32, rgba_data.to_vec())
+        .ok_or_else(|| anyhow::anyhow!("invalid pointer bitmap size"))?;
+    let mut png = Vec::new();
+    img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)?;
+    Ok(png)
+}
+
 /// Get the stream port from environment or default.
 pub fn get_stream_port() -> u16 {
     std::env::var("AGENT_RDP_STREAM_PORT")
@@ -564,4 +737,31 @@ pub fn get_stream_quality() -> u8 {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(80)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::request_allowed;
+
+    const PLAIN: &str = "GET / HTTP/1.1\r\nHost: 100.1.2.3:9224\r\n\r\n";
+
+    #[test]
+    fn allows_requests_without_token_when_none_is_set() {
+        assert!(request_allowed(PLAIN, None));
+    }
+
+    #[test]
+    fn requires_matching_token_when_set() {
+        assert!(!request_allowed(PLAIN, Some("secret")));
+        assert!(!request_allowed("GET /?token=wrong HTTP/1.1\r\nHost: h\r\n\r\n", Some("secret")));
+        assert!(request_allowed("GET /?token=secret HTTP/1.1\r\nHost: h\r\n\r\n", Some("secret")));
+    }
+
+    #[test]
+    fn rejects_cross_origin_requests() {
+        let cross = "GET / HTTP/1.1\r\nHost: localhost:9224\r\nOrigin: https://evil.example\r\n\r\n";
+        let same = "GET / HTTP/1.1\r\nHost: localhost:9224\r\nOrigin: http://localhost:9224\r\n\r\n";
+        assert!(!request_allowed(cross, None));
+        assert!(request_allowed(same, None));
+    }
 }

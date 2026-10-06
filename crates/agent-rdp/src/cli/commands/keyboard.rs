@@ -22,7 +22,7 @@ pub async fn run(
     let mut client = manager.ensure_daemon().await?;
 
     let keyboard_request = match args.action {
-        KeyboardAction::Type { text } => KeyboardRequest::Type { text },
+        KeyboardAction::Type { text, delay } => KeyboardRequest::Type { text, delay_ms: delay },
         KeyboardAction::Press { keys } => KeyboardRequest::Press { keys },
     };
 

@@ -9,7 +9,8 @@ allowed-tools: Bash(agent-rdp:*)
 ## Quick start
 
 ```bash
-agent-rdp connect --host <ip> -u <user> -p <pass> --enable-win-automation
+agent-rdp --stream-port 9224 connect --host <ip> -u <user> -p <pass> --enable-win-automation
+agent-rdp view                              # Open the live viewer for the user
 agent-rdp automate snapshot -i              # See interactive elements
 agent-rdp automate click "@e5"              # Click button by ref
 agent-rdp automate fill "@e7" "Hello"       # Type into field
@@ -18,10 +19,11 @@ agent-rdp disconnect
 
 ## Core workflow
 
-1. Connect with automation: `agent-rdp connect --host <ip> -u <user> -p <pass> --enable-win-automation`
-2. Snapshot: `agent-rdp automate snapshot -i` (get accessibility tree with refs)
-3. Act: `agent-rdp automate click @e5` or `agent-rdp automate fill @e7 "text"`
-4. Repeat: snapshot → act → snapshot → act...
+1. Connect with automation and streaming: `agent-rdp --stream-port 9224 connect --host <ip> -u <user> -p <pass> --enable-win-automation`
+2. Open the viewer so the user can watch: `agent-rdp view`. Do this by default; skip it only when the user asks for a headless run. When the user watches from another device, use `--stream-bind tailscale` and give them the printed `Viewer:` URL with its token instead (see "Debugging with WebSocket streaming").
+3. Snapshot: `agent-rdp automate snapshot -i` (get accessibility tree with refs)
+4. Act: `agent-rdp automate click @e5` or `agent-rdp automate fill @e7 "text"`
+5. Repeat: snapshot → act → snapshot → act...
 
 ## Troubleshooting
 
@@ -47,7 +49,7 @@ Some UI elements (WebView content, certain dialogs, toast notifications) don't a
 ```bash
 agent-rdp connect --host 192.168.1.100 -u Admin -p secret
 agent-rdp connect --host 192.168.1.100 -u Admin --password-stdin  # Read password from stdin
-agent-rdp connect --host 192.168.1.100 --width 1920 --height 1080
+agent-rdp connect --host 192.168.1.100 --width 1280 --height 800   # Smaller desktop (default: 1920x1080)
 agent-rdp connect --host 192.168.1.100 --drive /tmp/share:Share   # Map local directory
 agent-rdp disconnect
 ```
@@ -70,7 +72,8 @@ agent-rdp mouse drag 100 100 500 500      # Drag from (100,100) to (500,500)
 
 ### Keyboard
 ```bash
-agent-rdp keyboard type "Hello World"     # Type text (supports Unicode)
+agent-rdp keyboard type "Hello World"     # Type text (supports Unicode); over 16 chars it is pasted via the clipboard
+agent-rdp keyboard type "slow" --delay 50 # Always type, one character per 50 ms (no paste)
 agent-rdp keyboard press "ctrl+c"         # Key combination
 agent-rdp keyboard press "alt+tab"        # Switch windows
 agent-rdp keyboard press "ctrl+shift+esc" # Task manager
@@ -293,6 +296,19 @@ agent-rdp view --port 9224
 
 # Or manually access WebSocket at ws://localhost:9224 (broadcasts JPEG frames)
 ```
+
+The viewer listens on `127.0.0.1` by default. Anyone who can open it controls the session, so expose it only when the user asks to watch from another device:
+
+```bash
+# Bind to this machine's Tailscale IP; connect prints "Viewer: http://100.x.y.z:9224/?token=..."
+agent-rdp --stream-port 9224 --stream-bind tailscale connect --host 192.168.1.100 -u Admin -p secret
+
+# macOS alternative (the firewall blocks direct binds): keep loopback and publish over HTTPS
+tailscale serve --bg --https=9224 http://127.0.0.1:9224   # https://<machine>.<tailnet>.ts.net:9224
+tailscale serve --https=9224 off                           # stop publishing afterwards
+```
+
+Give the user the full tokenized URL; `agent-rdp view` cannot add the token. `0.0.0.0` is refused.
 
 ## Tips
 

@@ -89,8 +89,21 @@ enum SessionCommand {
 }
 
 /// Shared session state accessible from the main thread.
+/// Remote mouse pointer shape, as reported by the server.
+#[derive(Clone)]
+pub enum PointerShape {
+    /// System default arrow.
+    Default,
+    /// Pointer hidden by the remote application.
+    Hidden,
+    /// Custom pointer bitmap (RGBA, non-premultiplied).
+    Bitmap(Arc<ironrdp_graphics::pointer::DecodedPointer>),
+}
+
 struct SharedState {
     image: DecodedImage,
+    /// Current remote pointer shape and a counter that increments on every change.
+    pointer: (u64, PointerShape),
     host: String,
     width: u16,
     height: u16,
@@ -152,9 +165,11 @@ impl RdpSession {
             platform: MajorPlatformType::MACINTOSH,
             #[cfg(all(not(windows), not(target_os = "macos")))]
             platform: MajorPlatformType::UNIX,
-            pointer_software_rendering: true,
+            // Receive pointer shapes for the viewer without drawing them into the framebuffer,
+            // so screenshots stay cursor-free.
+            pointer_software_rendering: false,
             performance_flags: PerformanceFlags::default(),
-            enable_server_pointer: false,
+            enable_server_pointer: true,
             request_data: None,
             autologon: true,
             enable_audio_playback: false,
@@ -300,6 +315,7 @@ impl RdpSession {
             height: config.height,
             drives: config.drives.clone(),
             clipboard: clipboard_state,
+            pointer: (0, PointerShape::Default),
         }));
 
         // Create command channel
@@ -415,6 +431,11 @@ impl RdpSession {
     }
 
     /// Get a copy of the current desktop image data.
+    /// Current remote pointer shape with its change counter.
+    pub fn get_pointer(&self) -> (u64, PointerShape) {
+        self.shared.read().pointer.clone()
+    }
+
     pub fn get_image_data(&self) -> (u16, u16, Vec<u8>) {
         let state = self.shared.read();
         let width = state.image.width();
@@ -687,6 +708,15 @@ async fn run_frame_processor(
                                             ActiveStageOutput::Terminate(reason) => {
                                                 warn!("Session terminated: {:?}", reason);
                                                 terminate = true;
+                                            }
+                                            ActiveStageOutput::PointerDefault => {
+                                                state.pointer = (state.pointer.0 + 1, PointerShape::Default);
+                                            }
+                                            ActiveStageOutput::PointerHidden => {
+                                                state.pointer = (state.pointer.0 + 1, PointerShape::Hidden);
+                                            }
+                                            ActiveStageOutput::PointerBitmap(pointer) => {
+                                                state.pointer = (state.pointer.0 + 1, PointerShape::Bitmap(pointer));
                                             }
                                             _ => {}
                                         }

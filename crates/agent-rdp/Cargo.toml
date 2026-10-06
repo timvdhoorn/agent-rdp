@@ -12,6 +12,7 @@ name = "agent-rdp"
 path = "src/main.rs"
 
 [dependencies]
+uuid = { workspace = true }
 agent-rdp-daemon = { workspace = true }
 agent-rdp-protocol = { workspace = true }
 

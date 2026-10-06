@@ -25,6 +25,11 @@ pub struct Cli {
     #[arg(long, default_value = "0", env = "AGENT_RDP_STREAM_PORT", global = true)]
     pub stream_port: u16,
 
+    /// Address the streaming server binds to: an IP address or "tailscale" for this
+    /// machine's Tailscale IPv4 address (default: 127.0.0.1)
+    #[arg(long, env = "AGENT_RDP_STREAM_BIND", global = true)]
+    pub stream_bind: Option<String>,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -110,11 +115,11 @@ pub struct ConnectArgs {
     pub domain: Option<String>,
 
     /// Desktop width
-    #[arg(long, default_value = "1280")]
+    #[arg(long, default_value = "1920")]
     pub width: u16,
 
     /// Desktop height
-    #[arg(long, default_value = "800")]
+    #[arg(long, default_value = "1080")]
     pub height: u16,
 
     /// Map local directories as drives (format: /path:DriveName, can be specified multiple times)
@@ -209,6 +214,10 @@ pub enum KeyboardAction {
     Type {
         /// Text to type
         text: String,
+
+        /// Type one character per DELAY ms and never paste (default: text over 16 characters is pasted via the clipboard, shorter text typed at 100 ms per character)
+        #[arg(long)]
+        delay: Option<u32>,
     },
 
     /// Press a key combination (e.g., "ctrl+c", "alt+tab") or single key (e.g., "enter")
