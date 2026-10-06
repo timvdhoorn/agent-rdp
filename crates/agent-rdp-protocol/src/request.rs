@@ -103,6 +103,16 @@ pub struct ConnectRequest {
     #[serde(default)]
     pub stream_port: u16,
 
+    /// Address the streaming server binds to (default: 127.0.0.1).
+    #[serde(default)]
+    #[ts(optional)]
+    pub stream_bind: Option<String>,
+
+    /// Access token for the streaming server. Required when `stream_bind` is not loopback.
+    #[serde(default)]
+    #[ts(optional)]
+    pub stream_token: Option<String>,
+
     /// Streaming frame rate (default: 10).
     #[serde(default = "default_stream_fps")]
     pub stream_fps: u32,
@@ -133,12 +143,14 @@ impl Default for ConnectRequest {
             username: String::new(),
             password: String::new(),
             domain: None,
-            width: 1280,
-            height: 800,
+            width: 1920,
+            height: 1080,
             drives: Vec::new(),
             enable_win_automation: false,
             elevated_automation: false,
             stream_port: 0,
+            stream_bind: None,
+            stream_token: None,
             stream_fps: default_stream_fps(),
             stream_quality: default_stream_quality(),
             serve_viewer: false,
@@ -216,7 +228,13 @@ pub enum MouseButton {
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum KeyboardRequest {
     /// Type a text string (Unicode).
-    Type { text: String },
+    Type {
+        text: String,
+        /// Delay between characters in ms; when set, text is always typed. Unset: text over 16 characters is pasted via the clipboard (replacing it), shorter text is typed at 100 ms per character.
+        #[serde(default)]
+        #[ts(optional)]
+        delay_ms: Option<u32>,
+    },
 
     /// Press a key combination (e.g., "ctrl+c", "alt+tab", or single key like "enter").
     Press { keys: String },

@@ -105,7 +105,12 @@ export class KeyboardController {
 
   /** Type a text string (Unicode). */
   async type(options: KeyboardTypeOptions): Promise<void> {
-    await this.rdp._send({ type: 'keyboard', action: 'type', text: options.text });
+    await this.rdp._send({
+      type: 'keyboard',
+      action: 'type',
+      text: options.text,
+      ...(options.delayMs !== undefined && { delay_ms: options.delayMs }),
+    });
   }
 
   /** Press a key combination (e.g., 'ctrl+c', 'alt+tab') or single key (e.g., 'enter'). */
@@ -220,8 +225,8 @@ export class RdpSession {
    * @param options.username Username for authentication
    * @param options.password Password for authentication
    * @param options.domain Optional domain
-   * @param options.width Desktop width (default: 1280)
-   * @param options.height Desktop height (default: 800)
+   * @param options.width Desktop width (default: 1920)
+   * @param options.height Desktop height (default: 1080)
    * @param options.drives Drives to map
    * @param options.enableWinAutomation Enable Windows UI Automation
    * @param options.elevatedAutomation Start the automation agent as administrator
@@ -237,8 +242,8 @@ export class RdpSession {
       username: options.username,
       password: options.password,
       domain: options.domain,
-      width: options.width ?? 1280,
-      height: options.height ?? 800,
+      width: options.width ?? 1920,
+      height: options.height ?? 1080,
       drives: options.drives ?? [],
       enable_win_automation: options.enableWinAutomation ?? false,
       elevated_automation: options.elevatedAutomation ?? false,

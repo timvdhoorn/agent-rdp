@@ -164,10 +164,12 @@ impl Daemon {
                             let session = self.rdp_session.lock().await;
                             if let Some(ref rdp) = *session {
                                 let (width, height, data) = rdp.get_image_data();
+                                let (pointer_version, pointer) = rdp.get_pointer();
                                 drop(session); // Release lock before broadcasting
                                 let ws_handle = self.ws_handle.lock().await;
                                 if let Some(ref handle) = *ws_handle {
                                     handle.broadcast_frame(width, height, &data);
+                                    handle.broadcast_pointer(pointer_version, &pointer);
                                 }
                             }
                         }
@@ -344,7 +346,26 @@ async fn process_request(
         }
 
         Request::Mouse(action) => {
-            handlers::mouse::handle(rdp_session, action).await
+            use agent_rdp_protocol::MouseRequest;
+            let (start, end) = match action {
+                MouseRequest::Move { x, y } => (Some((x, y, "move")), None),
+                MouseRequest::Click { x, y } => (Some((x, y, "click")), None),
+                MouseRequest::RightClick { x, y } => (Some((x, y, "right_click")), None),
+                MouseRequest::DoubleClick { x, y } => (Some((x, y, "double_click")), None),
+                MouseRequest::MiddleClick { x, y } => (Some((x, y, "middle_click")), None),
+                MouseRequest::Drag { from_x, from_y, to_x, to_y } => {
+                    (Some((from_x, from_y, "press")), Some((to_x, to_y, "release")))
+                }
+                MouseRequest::ButtonDown { .. } | MouseRequest::ButtonUp { .. } => (None, None),
+            };
+            if let Some((x, y, kind)) = start {
+                broadcast_cursor(ws_handle, x, y, kind).await;
+            }
+            let response = handlers::mouse::handle(rdp_session, action).await;
+            if let Some((x, y, kind)) = end {
+                broadcast_cursor(ws_handle, x, y, kind).await;
+            }
+            response
         }
 
         Request::Keyboard(action) => {
@@ -370,5 +391,12 @@ async fn process_request(
         Request::Locate(params) => {
             handlers::locate::handle(rdp_session, params).await
         }
+    }
+}
+
+/// Show the agent's cursor in connected viewers.
+async fn broadcast_cursor(ws_handle: &SharedWsHandle, x: u16, y: u16, action: &'static str) {
+    if let Some(ref handle) = *ws_handle.lock().await {
+        handle.broadcast_cursor(x, y, action);
     }
 }

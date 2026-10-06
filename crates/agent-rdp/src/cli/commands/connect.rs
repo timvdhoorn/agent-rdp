@@ -15,7 +15,15 @@ pub async fn run(
     output: &Output,
     timeout_ms: u64,
     stream_port: u16,
+    stream_bind: Option<&str>,
 ) -> anyhow::Result<()> {
+    let stream_bind = stream_bind.map(super::view::resolve_bind).transpose()?;
+    // Non-loopback viewers require a random per-session token.
+    let stream_token = stream_bind
+        .as_deref()
+        .filter(|b| !super::view::is_loopback(b))
+        .map(|_| format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple()));
+
     // Get password from args, env, or stdin
     let password = get_password(&args, output)?;
 
@@ -37,6 +45,8 @@ pub async fn run(
         enable_win_automation: args.enable_win_automation,
         elevated_automation: args.elevated,
         stream_port,
+        stream_bind: stream_bind.clone(),
+        stream_token: stream_token.clone(),
         // CLI enables the viewer HTML when streaming is enabled
         serve_viewer: stream_port > 0,
         ..Default::default()
@@ -47,6 +57,14 @@ pub async fn run(
 
     if !response.success {
         std::process::exit(1);
+    }
+
+    if stream_port > 0 && !output.is_json() {
+        let url = super::view::viewer_url(stream_bind.as_deref(), stream_port);
+        match stream_token {
+            Some(token) => println!("Viewer: {}/?token={}", url, token),
+            None => println!("Viewer: {}", url),
+        }
     }
 
     Ok(())

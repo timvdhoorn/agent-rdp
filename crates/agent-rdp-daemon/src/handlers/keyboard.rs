@@ -16,14 +16,29 @@ pub async fn handle(
     rdp_session: &Arc<Mutex<Option<RdpSession>>>,
     action: KeyboardRequest,
 ) -> Response {
-    // For typing text, send one character at a time with delays for reliability
-    if let KeyboardRequest::Type { ref text } = action {
+    // Type text. Long text without an explicit delay is pasted via the clipboard:
+    // fast Unicode input gets garbled by some apps (Notepad's spell checker drops
+    // and repeats characters below ~100ms per character).
+    if let KeyboardRequest::Type { ref text, delay_ms } = action {
         debug!("Typing {} characters: {:?}", text.len(), text);
 
         const CHAR_DELAY_MS: u64 = 100;
+        const PASTE_THRESHOLD_CHARS: usize = 16;
 
-        for ch in text.chars() {
-            let code = ch as u16;
+        if delay_ms.is_none() && text.chars().count() > PASTE_THRESHOLD_CHARS {
+            match paste_text(rdp_session, text).await {
+                Ok(()) => return Response::ok(),
+                Err(response) if response_is_not_connected(&response) => return response,
+                // No clipboard channel: fall back to typing.
+                Err(_) => debug!("Clipboard paste unavailable, typing instead"),
+            }
+        }
+
+        let delay = delay_ms.map_or(CHAR_DELAY_MS, u64::from);
+
+        // UTF-16 code units, so characters outside the BMP are sent as surrogate pairs.
+        let units: Vec<u16> = text.encode_utf16().collect();
+        for &code in &units {
             let events = vec![
                 FastPathInputEvent::UnicodeKeyboardEvent(KeyboardFlags::empty(), code),
                 FastPathInputEvent::UnicodeKeyboardEvent(KeyboardFlags::RELEASE, code),
@@ -44,7 +59,7 @@ pub async fn handle(
                     return Response::error(ErrorCode::InternalError, e.to_string());
                 }
             }
-            sleep(Duration::from_millis(CHAR_DELAY_MS)).await;
+            sleep(Duration::from_millis(delay)).await;
         }
         return Response::ok();
     }
@@ -323,6 +338,46 @@ fn key_to_scancode(key: &str) -> Option<(u8, bool)> {
     .collect();
 
     key_map.get(key_lower.as_str()).copied()
+}
+
+fn response_is_not_connected(response: &Response) -> bool {
+    matches!(&response.error, Some(e) if e.code == ErrorCode::NotConnected)
+}
+
+/// Paste text by putting it on the remote clipboard and pressing Ctrl+V.
+/// Replaces the remote clipboard contents.
+async fn paste_text(rdp_session: &Arc<Mutex<Option<RdpSession>>>, text: &str) -> Result<(), Response> {
+    // Time for Windows to process the clipboard format list before Ctrl+V.
+    const ANNOUNCE_DELAY_MS: u64 = 300;
+    // Ctrl (0x1D) and V (0x2F) scancodes.
+    const CTRL: u8 = 0x1D;
+    const KEY_V: u8 = 0x2F;
+
+    {
+        let session = rdp_session.lock().await;
+        let rdp = session.as_ref().ok_or_else(|| {
+            Response::error(ErrorCode::NotConnected, "Not connected to an RDP server")
+        })?;
+        rdp.clipboard_set(text.to_string())
+            .await
+            .map_err(|e| Response::error(ErrorCode::ClipboardError, e.to_string()))?;
+    }
+    sleep(Duration::from_millis(ANNOUNCE_DELAY_MS)).await;
+
+    let steps = [(CTRL, false), (KEY_V, false), (KEY_V, true), (CTRL, true)];
+    for (scancode, release) in steps {
+        {
+            let session = rdp_session.lock().await;
+            let rdp = session.as_ref().ok_or_else(|| {
+                Response::error(ErrorCode::NotConnected, "Not connected to an RDP server")
+            })?;
+            rdp.send_input(vec![create_key_event_ext(scancode, false, release)])
+                .await
+                .map_err(|e| Response::error(ErrorCode::InternalError, e.to_string()))?;
+        }
+        sleep(Duration::from_millis(20)).await;
+    }
+    Ok(())
 }
 
 /// Create a keyboard event with proper flags.

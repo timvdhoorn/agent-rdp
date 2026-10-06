@@ -276,7 +276,27 @@ agent-rdp --stream-port 9224 connect --host 192.168.1.100 -u Admin -p secret
 agent-rdp view
 ```
 
-The viewer listens on `127.0.0.1` only, because it accepts mouse and keyboard input for the session.
+The viewer listens on `127.0.0.1` by default, because it accepts mouse and keyboard input for the session.
+
+To open it from other devices on your tailnet, either bind it to the Tailscale address:
+
+```bash
+agent-rdp --stream-port 9224 --stream-bind tailscale connect --host 192.168.1.100 -u Admin -p secret
+# Prints: Viewer: http://100.x.y.z:9224/?token=<random>
+```
+
+A non-loopback bind gets a random per-session token; requests without it are rejected. Binding to all interfaces (`0.0.0.0`, `::`) is refused.
+
+or keep the loopback bind and publish it with `tailscale serve` (HTTPS, tailnet only):
+
+```bash
+tailscale serve --bg --https=9224 http://127.0.0.1:9224
+# Open https://<machine>.<tailnet>.ts.net:9224
+```
+
+This route has no token: every device that your tailnet ACLs allow can control the session.
+
+On macOS, prefer `tailscale serve`: the application firewall blocks incoming connections to an unsigned `agent-rdp` binary on non-loopback addresses. All requests from a browser must come from the viewer's own origin. `--stream-bind` also accepts a specific IP address, or set `AGENT_RDP_STREAM_BIND`.
 
 ## JSON Output
 
@@ -321,6 +341,7 @@ agent-rdp --json screenshot --base64
 | `AGENT_RDP_PASSWORD` | RDP password |
 | `AGENT_RDP_SESSION` | Session name (default: "default") |
 | `AGENT_RDP_STREAM_PORT` | WebSocket streaming port (0 = disabled) |
+| `AGENT_RDP_STREAM_BIND` | Streaming bind address: IP or `tailscale` (default: 127.0.0.1) |
 
 ## Node.js API
 
@@ -335,8 +356,8 @@ await rdp.connect({
   host: '192.168.1.100',
   username: 'Administrator',
   password: 'secret',
-  width: 1280,
-  height: 800,
+  width: 1920,
+  height: 1080,
   drives: [{ path: '/tmp/share', name: 'Share' }],
   enableWinAutomation: true,  // Enable UI Automation
 });

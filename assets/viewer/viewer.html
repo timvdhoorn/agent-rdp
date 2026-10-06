@@ -3,159 +3,421 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
   <title>agent-rdp Viewer</title>
   <style>
+    /* shadcn/ui neutral theme tokens */
+    :root {
+      --radius: 0.625rem;
+      --background: oklch(1 0 0);
+      --foreground: oklch(0.145 0 0);
+      --card: oklch(1 0 0);
+      --card-foreground: oklch(0.145 0 0);
+      --primary: oklch(0.205 0 0);
+      --primary-foreground: oklch(0.985 0 0);
+      --secondary: oklch(0.97 0 0);
+      --secondary-foreground: oklch(0.205 0 0);
+      --muted: oklch(0.97 0 0);
+      --muted-foreground: oklch(0.556 0 0);
+      --accent: oklch(0.97 0 0);
+      --accent-foreground: oklch(0.205 0 0);
+      --destructive: oklch(0.577 0.245 27.325);
+      --border: oklch(0.922 0 0);
+      --input: oklch(0.922 0 0);
+      --ring: oklch(0.708 0 0);
+      --success: oklch(0.627 0.194 149.214);
+      --warning: oklch(0.769 0.188 70.08);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --background: oklch(0.145 0 0);
+        --foreground: oklch(0.985 0 0);
+        --card: oklch(0.205 0 0);
+        --card-foreground: oklch(0.985 0 0);
+        --primary: oklch(0.922 0 0);
+        --primary-foreground: oklch(0.205 0 0);
+        --secondary: oklch(0.269 0 0);
+        --secondary-foreground: oklch(0.985 0 0);
+        --muted: oklch(0.269 0 0);
+        --muted-foreground: oklch(0.708 0 0);
+        --accent: oklch(0.269 0 0);
+        --accent-foreground: oklch(0.985 0 0);
+        --destructive: oklch(0.704 0.191 22.216);
+        --border: oklch(1 0 0 / 10%);
+        --input: oklch(1 0 0 / 15%);
+        --ring: oklch(0.556 0 0);
+      }
+    }
+
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
     }
     body {
-      background: #1a1a2e;
-      color: #eee;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      min-height: 100vh;
+      background: var(--background);
+      color: var(--foreground);
+      font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+      height: 100vh;
       display: flex;
       flex-direction: column;
     }
-    #controls {
-      padding: 12px 16px;
-      background: #16213e;
+    svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* Header */
+    header {
+      height: 56px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
+      gap: 8px;
     }
-    #controls label {
-      font-size: 14px;
-      color: #aaa;
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      margin-right: 4px;
     }
-    #url {
-      padding: 8px 12px;
-      border: 1px solid #333;
-      border-radius: 4px;
-      background: #0f0f1a;
-      color: #fff;
-      font-size: 14px;
-      width: 280px;
+    .separator {
+      width: 1px;
+      height: 16px;
+      background: var(--border);
+      margin: 0 4px;
     }
-    #url:focus {
-      outline: none;
-      border-color: #4a9eff;
+    .spacer {
+      flex: 1;
     }
-    button {
-      padding: 8px 16px;
-      border: none;
-      border-radius: 4px;
-      font-size: 14px;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    #connectBtn {
-      background: #4a9eff;
-      color: white;
-    }
-    #connectBtn:hover {
-      background: #3a8eef;
-    }
-    #connectBtn.connected {
-      background: #e74c3c;
-    }
-    #connectBtn.connected:hover {
-      background: #c0392b;
-    }
-    #fullscreenBtn, #pasteBtn {
-      background: #333;
-      color: #fff;
-    }
-    #fullscreenBtn:hover, #pasteBtn:hover {
-      background: #444;
-    }
-    #pasteBtn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    #status {
-      font-size: 13px;
-      padding: 4px 10px;
-      border-radius: 12px;
-      background: #333;
-    }
-    #status.connected {
-      background: #27ae60;
-    }
-    #status.connecting {
-      background: #f39c12;
-    }
-    #status.disconnected {
-      background: #95a5a6;
-    }
-    #status.error {
-      background: #e74c3c;
-    }
-    #info {
+    .muted {
+      color: var(--muted-foreground);
       font-size: 12px;
-      color: #888;
-      margin-left: auto;
+      font-variant-numeric: tabular-nums;
     }
+
+    /* Button */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 32px;
+      padding: 0 12px;
+      border-radius: calc(var(--radius) - 2px);
+      border: 1px solid transparent;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
+    }
+    .btn:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+    .btn-default {
+      background: var(--primary);
+      color: var(--primary-foreground);
+    }
+    .btn-default:hover {
+      background: color-mix(in oklch, var(--primary) 90%, transparent);
+    }
+    .btn-destructive {
+      background: var(--destructive);
+      color: oklch(1 0 0);
+    }
+    .btn-destructive:hover {
+      background: color-mix(in oklch, var(--destructive) 90%, transparent);
+    }
+    .btn-outline {
+      background: var(--background);
+      border-color: var(--border);
+      box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    }
+    .btn-outline:hover {
+      background: var(--accent);
+      color: var(--accent-foreground);
+    }
+    .btn-icon {
+      width: 32px;
+      padding: 0;
+    }
+
+    /* Input */
+    .input {
+      height: 32px;
+      width: 300px;
+      padding: 0 10px;
+      border-radius: calc(var(--radius) - 2px);
+      border: 1px solid var(--input);
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .input:focus-visible {
+      outline: none;
+      border-color: var(--ring);
+      box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
+    }
+
+    /* Badge */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: calc(var(--radius) - 4px);
+      border: 1px solid var(--border);
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--muted-foreground);
+    }
+    .badge.connected .dot { background: var(--success); }
+    .badge.connecting .dot { background: var(--warning); animation: pulse 1s ease-in-out infinite; }
+    .badge.error .dot { background: var(--destructive); }
+    @keyframes pulse {
+      50% { opacity: 0.3; }
+    }
+
+    /* Viewer */
     #viewer {
       flex: 1;
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 16px;
       overflow: hidden;
+      background: var(--muted);
     }
     #screen {
       background: #000;
-      cursor: crosshair;
-      image-rendering: auto;
+      cursor: default;
+      border-radius: calc(var(--radius) - 2px);
+      box-shadow: 0 0 0 1px var(--border), 0 1px 3px 0 rgb(0 0 0 / 0.1);
     }
-    #screen:focus {
-      outline: 2px solid #4a9eff;
+    #screen:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 1px var(--ring), 0 0 0 4px color-mix(in oklch, var(--ring) 50%, transparent);
     }
+
+    /* Card (empty state) */
+    .card {
+      position: absolute;
+      width: min(360px, calc(100% - 32px));
+      padding: 24px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--card-foreground);
+      box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .card-title {
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-description {
+      color: var(--muted-foreground);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .card .btn {
+      margin-top: 12px;
+      align-self: flex-start;
+    }
+    .spin {
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .spin, .badge.connecting .dot { animation: none; }
+    }
+
+    /* Agent cursor overlay (viewer only, never drawn on the remote desktop) */
+    #agentCursor {
+      position: absolute;
+      left: 0;
+      top: 0;
+      pointer-events: none;
+      z-index: 10;
+      transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    #agentCursor .pointer {
+      width: 22px;
+      height: 22px;
+      fill: var(--foreground);
+      stroke: var(--background);
+      stroke-width: 1.5;
+      filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.4));
+    }
+    #agentCursor .remote-pointer {
+      display: block;
+      filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.4));
+    }
+    #agentCursor .ripple {
+      position: absolute;
+      left: -12px;
+      top: -12px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid var(--foreground);
+      opacity: 0;
+    }
+    #agentCursor .ripple.active {
+      animation: ripple 0.5s ease-out;
+    }
+    @keyframes ripple {
+      from { transform: scale(0.4); opacity: 0.9; }
+      to { transform: scale(1.6); opacity: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #agentCursor { transition: none; }
+      #agentCursor .ripple.active { animation: none; }
+    }
+
     .hidden {
       display: none !important;
+    }
+    @media (max-width: 720px) {
+      #url, .separator, .btn .label { display: none; }
     }
   </style>
 </head>
 <body>
-  <div id="controls">
-    <label for="url">WebSocket:</label>
-    <input type="text" id="url" value="ws://localhost:9224" placeholder="ws://localhost:9224">
-    <button id="connectBtn" onclick="toggleConnection()">Connect</button>
-    <button id="pasteBtn" onclick="sendClipboardToRemote()" disabled>Send Clipboard to Remote</button>
-    <button id="fullscreenBtn" onclick="toggleFullscreen()">Fullscreen</button>
-    <span id="status" class="disconnected">Disconnected</span>
-    <span id="info"></span>
-  </div>
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+      agent-rdp
+    </div>
+    <span id="status" class="badge disconnected"><span class="dot"></span><span id="statusText">Disconnected</span></span>
+    <span id="info" class="muted"></span>
+    <div class="spacer"></div>
+    <input type="text" id="url" class="input" value="ws://localhost:9224" placeholder="ws://localhost:9224" aria-label="WebSocket URL" spellcheck="false">
+    <button id="connectBtn" class="btn btn-default" onclick="toggleConnection()">
+      <svg viewBox="0 0 24 24"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg>
+      <span class="label">Connect</span>
+    </button>
+    <div class="separator"></div>
+    <button id="pasteBtn" class="btn btn-outline" onclick="sendClipboardToRemote()" disabled title="Send local clipboard to the remote session">
+      <svg viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+      <span class="label">Send clipboard</span>
+    </button>
+    <button id="fullscreenBtn" class="btn btn-outline btn-icon" onclick="toggleFullscreen()" title="Fullscreen" aria-label="Fullscreen">
+      <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+    </button>
+  </header>
   <div id="viewer">
-    <canvas id="screen" tabindex="0"></canvas>
+    <canvas id="screen" tabindex="0" class="hidden"></canvas>
+    <div id="agentCursor" class="hidden" aria-hidden="true">
+      <span class="ripple"></span>
+      <svg class="pointer" viewBox="0 0 24 24"><path d="M4 2.5v17.2l4.6-4.4 3 6.9 3.1-1.3-3-6.8h6.4z"/></svg>
+      <img class="remote-pointer hidden" alt="">
+    </div>
+    <div id="emptyState" class="card">
+      <div class="card-title">
+        <svg id="emptyIcon" viewBox="0 0 24 24" class="spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+        <span id="emptyTitle">Connecting…</span>
+      </div>
+      <p id="emptyDescription" class="card-description">Waiting for the agent-rdp stream.</p>
+      <button id="retryBtn" class="btn btn-outline hidden" onclick="connectNow()">Retry now</button>
+    </div>
   </div>
 
   <script>
     const urlInput = document.getElementById('url');
     const connectBtn = document.getElementById('connectBtn');
+    const connectLabel = connectBtn.querySelector('.label');
     const pasteBtn = document.getElementById('pasteBtn');
-    const statusSpan = document.getElementById('status');
+    const statusBadge = document.getElementById('status');
+    const statusText = document.getElementById('statusText');
     const infoSpan = document.getElementById('info');
     const viewer = document.getElementById('viewer');
     const canvas = document.getElementById('screen');
     const ctx = canvas.getContext('2d');
+    const emptyState = document.getElementById('emptyState');
+    const emptyIcon = document.getElementById('emptyIcon');
+    const emptyTitle = document.getElementById('emptyTitle');
+    const emptyDescription = document.getElementById('emptyDescription');
+    const retryBtn = document.getElementById('retryBtn');
+
+    const agentCursor = document.getElementById('agentCursor');
+    const cursorRipple = agentCursor.querySelector('.ripple');
+    const cursorArrow = agentCursor.querySelector('.pointer');
+    const cursorImage = agentCursor.querySelector('.remote-pointer');
+    let cursorPos = null;
+    // Hotspot of the remote Windows pointer; null while the default arrow is used.
+    let pointerHotspot = null;
 
     let ws = null;
     let connected = false;
     let deviceWidth = 0;
     let deviceHeight = 0;
 
+    // Auto-reconnect: keep retrying until the user clicks Disconnect.
+    let autoReconnect = false;
+    let reconnectAttempt = 0;
+    let reconnectTimer = null;
+    let countdownTimer = null;
+
     function setStatus(text, className) {
-      statusSpan.textContent = text;
-      statusSpan.className = className || '';
+      statusText.textContent = text;
+      statusBadge.className = 'badge ' + (className || '');
+    }
+
+    function showEmptyState(title, description, { spinning = false, retry = false } = {}) {
+      emptyTitle.textContent = title;
+      emptyDescription.textContent = description;
+      emptyIcon.classList.toggle('hidden', !spinning);
+      retryBtn.classList.toggle('hidden', !retry);
+      emptyState.classList.remove('hidden');
+      canvas.classList.add('hidden');
+      agentCursor.classList.add('hidden');
+    }
+
+    function hideEmptyState() {
+      emptyState.classList.add('hidden');
+      canvas.classList.remove('hidden');
+      if (cursorPos) agentCursor.classList.remove('hidden');
     }
 
     function updateInfo() {
       if (deviceWidth && deviceHeight) {
-        infoSpan.textContent = `${deviceWidth}x${deviceHeight}`;
+        infoSpan.textContent = `${deviceWidth}×${deviceHeight}`;
       } else {
         infoSpan.textContent = '';
       }
@@ -173,52 +435,153 @@
 
       canvas.style.width = `${Math.round(canvas.width * scale)}px`;
       canvas.style.height = `${Math.round(canvas.height * scale)}px`;
+      placeCursor();
+    }
+
+    // Position the agent cursor overlay at remote desktop coordinates.
+    function placeCursor() {
+      if (!cursorPos || canvas.width === 0) return;
+      const rect = canvas.getBoundingClientRect();
+      const base = viewer.getBoundingClientRect();
+      const x = rect.left - base.left + cursorPos.x * rect.width / canvas.width;
+      const y = rect.top - base.top + cursorPos.y * rect.height / canvas.height;
+      const [hx, hy] = pointerHotspot || [4, 2];
+      agentCursor.style.transform = `translate(${x - hx}px, ${y - hy}px)`;
+      // Center the click ripple on the hotspot.
+      cursorRipple.style.left = `${hx - 12}px`;
+      cursorRipple.style.top = `${hy - 12}px`;
+    }
+
+    // Use the remote Windows pointer for the local mouse and the agent cursor.
+    function applyPointer(msg) {
+      if (msg.shape === 'bitmap' && msg.data) {
+        const url = 'data:image/png;base64,' + msg.data;
+        canvas.style.cursor = `url(${url}) ${msg.hotspotX} ${msg.hotspotY}, default`;
+        cursorImage.src = url;
+        pointerHotspot = [msg.hotspotX, msg.hotspotY];
+        cursorImage.classList.remove('hidden');
+        cursorArrow.classList.add('hidden');
+      } else {
+        canvas.style.cursor = msg.shape === 'hidden' ? 'none' : 'default';
+        pointerHotspot = null;
+        cursorImage.classList.add('hidden');
+        cursorArrow.classList.remove('hidden');
+      }
+      placeCursor();
+    }
+
+    function showAgentCursor(msg) {
+      const first = !cursorPos;
+      cursorPos = { x: msg.x, y: msg.y };
+      if (first) agentCursor.style.transition = 'none';
+      placeCursor();
+      agentCursor.classList.toggle('hidden', !connected);
+      if (first) requestAnimationFrame(() => { agentCursor.style.transition = ''; });
+
+      if (msg.action !== 'move') {
+        // Restart the click ripple once the cursor has arrived.
+        setTimeout(() => {
+          cursorRipple.classList.remove('active');
+          void cursorRipple.offsetWidth;
+          cursorRipple.classList.add('active');
+        }, first ? 0 : 200);
+      }
     }
 
     // Update scale on window resize
     window.addEventListener('resize', updateCanvasScale);
 
+    function setConnectButton(isConnected) {
+      connectLabel.textContent = isConnected || autoReconnect ? 'Disconnect' : 'Connect';
+      connectBtn.classList.toggle('btn-default', !(isConnected || autoReconnect));
+      connectBtn.classList.toggle('btn-destructive', isConnected || autoReconnect);
+    }
+
     function toggleConnection() {
-      if (connected) {
+      if (connected || autoReconnect) {
         disconnect();
       } else {
-        connect();
+        connectNow();
       }
+    }
+
+    function clearReconnect() {
+      clearTimeout(reconnectTimer);
+      clearInterval(countdownTimer);
+      reconnectTimer = null;
+      countdownTimer = null;
+    }
+
+    // Connect immediately and keep the connection alive.
+    function connectNow() {
+      autoReconnect = true;
+      reconnectAttempt = 0;
+      clearReconnect();
+      connect();
+    }
+
+    function scheduleReconnect() {
+      const delay = Math.min(1000 * 2 ** reconnectAttempt, 10000);
+      reconnectAttempt++;
+      let remaining = Math.ceil(delay / 1000);
+
+      const update = () => {
+        setStatus(`Reconnecting in ${remaining}s`, 'connecting');
+        showEmptyState('Stream unavailable', `Retrying in ${remaining}s. Make sure the session has streaming enabled.`, { retry: true });
+      };
+      update();
+      countdownTimer = setInterval(() => {
+        remaining = Math.max(remaining - 1, 0);
+        update();
+      }, 1000);
+      reconnectTimer = setTimeout(() => {
+        clearReconnect();
+        connect();
+      }, delay);
     }
 
     function connect() {
       const url = urlInput.value.trim();
-      if (!url) return;
+      if (!url || ws) return;
 
-      setStatus('Connecting...', 'connecting');
+      setStatus('Connecting…', 'connecting');
+      setConnectButton(false);
+      if (!connected) {
+        showEmptyState('Connecting…', 'Waiting for the agent-rdp stream.', { spinning: true });
+      }
 
       try {
         ws = new WebSocket(url);
       } catch (e) {
-        setStatus('Error: ' + e.message, 'error');
+        setStatus('Invalid URL', 'error');
+        showEmptyState('Invalid URL', e.message, { retry: true });
+        autoReconnect = false;
+        setConnectButton(false);
         return;
       }
 
       ws.onopen = () => {
         connected = true;
-        connectBtn.textContent = 'Disconnect';
-        connectBtn.classList.add('connected');
+        reconnectAttempt = 0;
+        setConnectButton(true);
         pasteBtn.disabled = false;
         setStatus('Connected', 'connected');
+        hideEmptyState();
         canvas.focus();
       };
 
       ws.onclose = () => {
         connected = false;
-        connectBtn.textContent = 'Connect';
-        connectBtn.classList.remove('connected');
-        pasteBtn.disabled = true;
-        setStatus('Disconnected', 'disconnected');
         ws = null;
-      };
-
-      ws.onerror = (e) => {
-        setStatus('Connection error', 'error');
+        pasteBtn.disabled = true;
+        if (autoReconnect) {
+          setConnectButton(false);
+          scheduleReconnect();
+        } else {
+          setConnectButton(false);
+          setStatus('Disconnected', 'disconnected');
+          showEmptyState('Disconnected', 'Click Connect to resume the stream.');
+        }
       };
 
       ws.onmessage = (event) => {
@@ -232,8 +595,14 @@
     }
 
     function disconnect() {
+      autoReconnect = false;
+      clearReconnect();
       if (ws) {
         ws.close();
+      } else {
+        setConnectButton(false);
+        setStatus('Disconnected', 'disconnected');
+        showEmptyState('Disconnected', 'Click Connect to resume the stream.');
       }
     }
 
@@ -262,6 +631,10 @@
           deviceHeight = msg.viewportHeight;
           updateInfo();
         }
+      } else if (msg.type === 'cursor') {
+        showAgentCursor(msg);
+      } else if (msg.type === 'pointer') {
+        applyPointer(msg);
       } else if (msg.type === 'clipboard_changed') {
         // Remote clipboard changed - request the content
         sendInput({ type: 'clipboard_get', formats: ['text'] });
@@ -373,14 +746,6 @@
     // Keyboard events
     // For printable characters, use 'char' event (unicode) for reliable text input
     // For non-printable keys (modifiers, arrows, function keys), use keyDown/keyUp (scancodes)
-    const nonPrintableKeys = new Set([
-      'Escape', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12',
-      'Tab', 'CapsLock', 'Shift', 'Control', 'Alt', 'Meta',
-      'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-      'Insert', 'Delete', 'Home', 'End', 'PageUp', 'PageDown',
-      'Enter', 'Backspace', 'NumLock', 'ScrollLock', 'Pause', 'PrintScreen'
-    ]);
-
     canvas.addEventListener('keydown', (e) => {
       e.preventDefault();
 
@@ -434,19 +799,28 @@
     // Update scale when exiting fullscreen
     document.addEventListener('fullscreenchange', updateCanvasScale);
 
-    // Auto-connect on Enter in URL field
-    urlInput.addEventListener('keypress', (e) => {
+    // Connect on Enter in URL field
+    urlInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
-        toggleConnection();
+        if (ws) ws.close();
+        connectNow();
       }
     });
 
-    // Check URL params for auto-connect
+    // Auto-connect: from the ?ws= parameter, or to the host that served this page.
     const params = new URLSearchParams(window.location.search);
     const wsUrl = params.get('ws');
     if (wsUrl) {
       urlInput.value = wsUrl;
-      connect();
+      connectNow();
+    } else if (location.protocol === 'http:' || location.protocol === 'https:') {
+      // Served by the daemon (directly or behind a proxy): stream from the same host.
+      const token = params.get('token');
+      urlInput.value = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host
+        + (token ? '/?token=' + encodeURIComponent(token) : '');
+      connectNow();
+    } else {
+      showEmptyState('Not connected', 'Enter the stream URL and click Connect.');
     }
   </script>
 </body>

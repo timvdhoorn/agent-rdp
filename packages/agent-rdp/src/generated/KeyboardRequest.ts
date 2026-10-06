@@ -3,4 +3,8 @@
 /**
  * Keyboard operation request.
  */
-export type KeyboardRequest = { "action": "type", text: string, } | { "action": "press", keys: string, } | { "action": "key_down", key: string, } | { "action": "key_up", key: string, };
+export type KeyboardRequest = { "action": "type", text: string, 
+/**
+ * Delay between characters in ms; when set, text is always typed. Unset: text over 16 characters is pasted via the clipboard (replacing it), shorter text is typed at 100 ms per character.
+ */
+delay_ms?: number, } | { "action": "press", keys: string, } | { "action": "key_down", key: string, } | { "action": "key_up", key: string, };

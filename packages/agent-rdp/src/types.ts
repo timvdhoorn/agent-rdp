@@ -133,6 +133,8 @@ export interface ScrollOptions {
 export interface KeyboardTypeOptions {
   /** Text to type. */
   text: string;
+  /** Delay between characters in ms; when set, text is always typed. Unset: text over 16 characters is pasted via the clipboard (replacing it), shorter text is typed at 100 ms per character. */
+  delayMs?: number;
 }
 
 /** Options for keyboard press operations. */
