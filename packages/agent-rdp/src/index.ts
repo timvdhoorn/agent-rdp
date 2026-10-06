@@ -224,6 +224,7 @@ export class RdpSession {
    * @param options.height Desktop height (default: 800)
    * @param options.drives Drives to map
    * @param options.enableWinAutomation Enable Windows UI Automation
+   * @param options.elevatedAutomation Start the automation agent as administrator
    */
   async connect(options: ConnectOptions): Promise<ConnectResult> {
     // Ensure daemon is running and connect
@@ -240,6 +241,7 @@ export class RdpSession {
       height: options.height ?? 800,
       drives: options.drives ?? [],
       enable_win_automation: options.enableWinAutomation ?? false,
+      elevated_automation: options.elevatedAutomation ?? false,
       stream_port: 0,
       stream_fps: 10,
       stream_quality: 80,

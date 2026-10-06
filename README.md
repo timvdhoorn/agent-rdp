@@ -185,6 +185,9 @@ For detailed documentation, see [AUTOMATION.md](https://github.com/thisnick/agen
 # Connect with automation enabled
 agent-rdp connect --host 192.168.1.100 -u Admin -p secret --enable-win-automation
 
+# Run the agent as administrator (answers one UAC prompt in the session with Alt+Y)
+agent-rdp connect --host 192.168.1.100 -u Admin -p secret --enable-win-automation --elevated
+
 # Take an accessibility tree snapshot (refs are always included)
 agent-rdp automate snapshot
 
@@ -272,6 +275,8 @@ The viewer requires WebSocket streaming to be enabled. Start a session with stre
 agent-rdp --stream-port 9224 connect --host 192.168.1.100 -u Admin -p secret
 agent-rdp view
 ```
+
+The viewer listens on `127.0.0.1` only, because it accepts mouse and keyboard input for the session.
 
 ## JSON Output
 

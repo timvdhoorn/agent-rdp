@@ -161,13 +161,15 @@ When `--enable-win-automation` is specified:
 8. Send Win+R keystroke to open Run dialog
 9. Type PowerShell launch command:
    ```
-   powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File "\\TSCLIENT\agent-automation\scripts\agent.ps1"
+   powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "\\TSCLIENT\agent-automation\scripts\agent.ps1"
    ```
-10. Press Enter
+10. Press Enter, or with `--elevated` press Ctrl+Shift+Enter and confirm the UAC prompt with Alt+Y
 11. Wait for DVC handshake message
 12. Return success or timeout error
 
 **Note**: RDPDR drive mapping is still used for bootstrapping (launching the agent), but all subsequent IPC uses DVC.
+
+**Host traces**: the agent writes no log unless started with `-LogPath <file>`, and on startup it removes its own entry from the Run dialog history (`HKCU\...\Explorer\RunMRU`). It exits when the DVC channel closes on disconnect.
 
 ## PowerShell Agent
 

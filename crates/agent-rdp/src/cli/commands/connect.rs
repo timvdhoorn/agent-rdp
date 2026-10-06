@@ -35,6 +35,7 @@ pub async fn run(
         height: args.height,
         drives,
         enable_win_automation: args.enable_win_automation,
+        elevated_automation: args.elevated,
         stream_port,
         // CLI enables the viewer HTML when streaming is enabled
         serve_viewer: stream_port > 0,
